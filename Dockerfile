@@ -9,5 +9,6 @@ COPY app.py /app/
 COPY config.py /app/
 COPY feature_x.py /app/
 COPY .env /app/
+RUN mkdir /app/voice/
 
 CMD ["python", "source/app.py"]

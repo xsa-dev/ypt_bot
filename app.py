@@ -8,7 +8,7 @@ from aiogram import executor
 from dotenv import load_dotenv
 
 from config import commands, MY_PHOTOS_1, MY_PHOTOS_2, CommandNotRecognized, MY_VOICE_1, MY_VOICE_2
-from feature_x import return_one_gif, get_answer_from_gpt_model
+from feature_x import return_one_gif, get_answer_from_gpt_model, get_text_from_user_voice, get_commands_vector
 
 load_dotenv('.env')
 TG_TOKEN = os.getenv("TG_TOKEN")
@@ -17,10 +17,46 @@ REPO_URL = os.getenv("REPO_URL")
 bot = Bot(token=TG_TOKEN, parse_mode=types.ParseMode.HTML)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
+commands_vector = []
 
 
 async def set_commands():
     await bot.set_my_commands(commands)
+
+
+@dp.message_handler(content_types='voice')
+async def recognize_command(message: types.Message):
+    await bot.send_chat_action(message.from_user.id, "typing")
+    directory = './voice'
+    for filename in os.listdir(directory):
+        file_path = os.path.join(directory, filename)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+    try:
+        file_id = message.voice.file_id
+        tg_file = await bot.get_file(file_id)
+        await bot.download_file(tg_file.file_path, destination=tg_file.file_path)
+        command = get_text_from_user_voice(tg_file.file_path)
+        request = command.result()
+        command = request.text
+        os.remove(tg_file.file_path)
+
+        commands_vector = await get_commands_vector(commands=commands, command=command)
+
+        if len(commands_vector) == 0:
+            command = CommandNotRecognized + "\r\n" + request.text
+        else:
+            try:
+                recognized_commands = list(set(commands_vector))
+                command = request.text + '\r\n'
+                command += "\r\n".join(recognized_commands)
+            except Exception as E:
+                command = CommandNotRecognized
+
+    except Exception as E:
+        command = CommandNotRecognized
+
+    await message.reply(command)
 
 
 @dp.message_handler(Command("start"))
@@ -30,7 +66,7 @@ async def start(message: types.Message, state: FSMContext):
         f_text += f"{command.command} - {command.description}\r\n"
 
     await message.reply(
-        "привет! бот для тестового задания яндекс.практикум.\n\nдоступные команды:\n" + \
+        "привет! Я бот для тестового задания яндекс.практикум.\n\nдоступные команды:\n" + \
         f_text,
         reply_markup=types.ReplyKeyboardMarkup(keyboard=None)
     )
@@ -63,17 +99,14 @@ async def send_photo(message: types.Message, state: FSMContext):
             photo=MY_PHOTOS_1.get('image' or None),
             caption=MY_PHOTOS_1.get('caption' or None)
         )
-        return
     elif message.text == MY_PHOTOS_2['name']:
         await bot.send_photo(
             chat_id=message.from_user.id,
             photo=MY_PHOTOS_2.get('image' or None),
             caption=MY_PHOTOS_2.get('caption' or None)
         )
-        return
     else:
         await message.reply(CommandNotRecognized)
-        return
 
 
 @dp.message_handler(Command("about_me"))
@@ -85,11 +118,16 @@ async def about_me(message: types.Message, state: FSMContext):
     button3 = types.KeyboardButton("/start")
     keyboard.add(button1, button2)
     keyboard.add(button3)
-    answer_text = 'about_me\r\n' + \
-                  "чтобы посмотреть больше обо мне, выбери на клавиатуре что именно хотел бы увидеть."
+    answer_text = ('<b>about_me<b>\r\n' + """
+                Мое имя Алексей Савин. Мне 35 лет. Я из Москвы и живу в Москве всю свою жизнь. Мой сайт: https://alekseysavin.com
+                А еще у меня есть микроблог: https://t.me/xsa_logs
+                Очень интересно сделать свой курс на тему больших языковых моделей.\r\n
+                Тут короткая <a src="https://telegra.ph/Istoriya-lyubvi-08-31">история о любви</a>\r\n
+                """.strip() + "чтобы посмотреть больше обо мне, выбери на клавиатуре что именно хотел бы увидеть.")
     await bot.send_message(chat_id=message.from_user.id,
                            text=answer_text,
-                           reply_markup=keyboard)
+                           reply_markup=keyboard,
+                           parse_mode='html')
 
 
 @dp.message_handler(Command("granny_faq"))
@@ -99,9 +137,12 @@ async def granny_faq(message: types.Message, state: FSMContext):
     button1 = types.InlineKeyboardButton(MY_VOICE_1.get('name' or None), callback_data=MY_VOICE_1.get('name' or None))
     button2 = types.InlineKeyboardButton(MY_VOICE_2.get('name' or None), callback_data=MY_VOICE_2.get('name' or None))
 
-    # Добавляем кнопки на онлайн-клавиатуру
     inline_keyboard.add(button1, button2)
-    await message.reply('granny_faq\r\n', reply_markup=inline_keyboard)
+    await message.reply(
+        '<b>granny_faq</b>\r\nо сложном для бабушки',
+        reply_markup=inline_keyboard,
+        parse_mode='html'
+    )
     return
 
 
@@ -128,4 +169,4 @@ async def feature(message: types.Message, state: FSMContext):
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     asyncio.run_coroutine_threadsafe(set_commands(), loop=loop)
-    executor.start_polling(dp, skip_updates=True)
+    executor.start_polling(dp, skip_updates=False)

@@ -13,12 +13,12 @@ commands = [
 ]
 
 MY_PHOTOS_1 = {
-    "name": "СОЧИ",
+    "name": "СЕЛФИ СОЧИ",
     "image": os.getenv("image_1")
 }
 
 MY_PHOTOS_2 = {
-    "name": "АРМЕНИЯ",
+    "name": "СЕЛФИ АРМЕНИЯ",
     "image": os.getenv("image_2")
 }
 
