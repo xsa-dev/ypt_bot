@@ -1,0 +1,6 @@
+/venv/
+/research/
+/.idea/
+/.env
+/Pipfile
+/Pipfile.lock
