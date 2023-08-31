@@ -1,0 +1,20 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Create .env file
+      run: cp .env.template .env | echo "env created - done"
+    - name: Build the Docker image
+      run: docker build . --file Dockerfile --tag ypt_bot:$(date +%s)
