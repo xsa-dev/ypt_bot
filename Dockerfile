@@ -11,4 +11,4 @@ COPY feature_x.py /app/
 COPY .env /app/
 RUN mkdir /app/voice/
 
-CMD ["python", "source/app.py"]
+CMD ["python", "app.py"]

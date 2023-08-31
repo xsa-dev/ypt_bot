@@ -116,18 +116,20 @@ async def about_me(message: types.Message, state: FSMContext):
     button1 = types.KeyboardButton(MY_PHOTOS_1['name'])
     button2 = types.KeyboardButton(MY_PHOTOS_2['name'])
     button3 = types.KeyboardButton("/start")
+    button4 = types.KeyboardButton("/feature")
     keyboard.add(button1, button2)
-    keyboard.add(button3)
-    answer_text = ('<b>about_me<b>\r\n' + """
-                Мое имя Алексей Савин. Мне 35 лет. Я из Москвы и живу в Москве всю свою жизнь. Мой сайт: https://alekseysavin.com
-                А еще у меня есть микроблог: https://t.me/xsa_logs
-                Очень интересно сделать свой курс на тему больших языковых моделей.\r\n
-                Тут короткая <a src="https://telegra.ph/Istoriya-lyubvi-08-31">история о любви</a>\r\n
-                """.strip() + "чтобы посмотреть больше обо мне, выбери на клавиатуре что именно хотел бы увидеть.")
+    keyboard.add(button3, button4)
+    answer_text = ('<b>about_me</b>\r\n' + """
+Мое имя Алексей Савин. Мне 35 лет. Я из Москвы и живу в Москве всю свою жизнь. Мой сайт: https://alekseysavin.com
+А еще у меня есть микроблог: https://t.me/xsa_logs
+Очень интересно сделать свой курс на тему больших языковых моделей.\r\n
+Тут короткая <a href="https://telegra.ph/Istoriya-lyubvi-08-31">история о любви</a>\r\n
+                """.strip() + "\r\n<i>чтобы посмотреть больше обо мне, выбери на клавиатуре что именно хотел бы увидеть.</i>")
     await bot.send_message(chat_id=message.from_user.id,
                            text=answer_text,
                            reply_markup=keyboard,
-                           parse_mode='html')
+                           parse_mode='html',
+                           disable_web_page_preview=True)
 
 
 @dp.message_handler(Command("granny_faq"))
