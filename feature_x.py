@@ -1,19 +1,19 @@
-import asyncio
 import os
 import random
 from urllib import parse
 
+import json
 import aiohttp
-from dotenv import load_dotenv
 import assemblyai as aai
+from dotenv import load_dotenv
 
 from config import CommandNotRecognized
+from config import commands
 
 aai.settings.api_key = os.getenv("AI_API_KEY")
 
 load_dotenv('.env')
 
-import spacy
 import spacy.cli
 
 try:
@@ -44,7 +44,18 @@ async def return_one_gif(query=os.getenv("GIPHY_QUERY", "funny sandwich"), limit
                 return items[0]
 
 
-async def get_answer_from_gpt_model(user_text: str = "funny sandwich") -> str:
+async def get_yandex_token_with_auth() -> dict:
+    url = "https://iam.api.cloud.yandex.net/iam/v1/tokens"
+    data = {
+        "yandexPassportOauthToken": os.getenv('YIATH')
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, data=json.dumps(data)) as response:
+            response_data = await response.json()
+    return response_data
+
+
+async def get_answer_from_gpt_model(user_text: str = "funny sandwich", retry=False) -> str | None:
     headers = {
         "Authorization": f"Bearer {os.getenv('YIAM')}",
         "x-folder-id": "b1gmsqg2bg9ovf4uqsf4"
@@ -73,6 +84,14 @@ async def get_answer_from_gpt_model(user_text: str = "funny sandwich") -> str:
             response = await response.json()
             try:
                 return response['result']['alternatives'][0]['text']
+            except KeyError as E:
+                get_yiam_token_response_json = await get_yandex_token_with_auth()
+                if 'iamToken' in get_yiam_token_response_json:
+                    os.environ['YIAM'] = get_yiam_token_response_json.get('iamToken' or None)
+                if not retry:
+                    return await get_answer_from_gpt_model(user_text=user_text, retry=True)
+                else:
+                    return None
             except Exception as E:
                 return None
 
@@ -81,9 +100,6 @@ async def get_text_from_user_voice(voice_file) -> str:
     global transcriber
     transcript = transcriber.transcribe_async(voice_file)
     return transcript.result().text
-
-
-from config import commands
 
 
 def send_commands_vector_sync(bot, message, file):
@@ -118,5 +134,6 @@ def send_commands_vector_sync(bot, message, file):
             except Exception as E:
                 command = CommandNotRecognized
         return command
+
     command = get_commands()
     return message, command, file
