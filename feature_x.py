@@ -1,3 +1,4 @@
+import asyncio
 import os
 import random
 from urllib import parse
@@ -6,17 +7,23 @@ import aiohttp
 from dotenv import load_dotenv
 import assemblyai as aai
 
+from config import CommandNotRecognized
+
 aai.settings.api_key = os.getenv("AI_API_KEY")
 
 load_dotenv('.env')
 
 import spacy
 import spacy.cli
+
 try:
     nlp = spacy.load('ru_core_news_md')
 except Exception as E:
     spacy.cli.download("ru_core_news_md")
     nlp = spacy.load('ru_core_news_md')
+
+config = aai.TranscriptionConfig(language_code="ru")
+transcriber = aai.Transcriber(config=config)
 
 
 async def return_one_gif(query=os.getenv("GIPHY_QUERY", "funny sandwich"), limit=100, randomize=True):
@@ -70,24 +77,26 @@ async def get_answer_from_gpt_model(user_text: str = "funny sandwich") -> str:
                 return None
 
 
-def get_text_from_user_voice(voice_file) -> str:
-    config = aai.TranscriptionConfig(language_code="ru")
-    transcriber = aai.Transcriber(config=config)
+async def get_text_from_user_voice(voice_file) -> str:
+    global transcriber
     transcript = transcriber.transcribe_async(voice_file)
-    return transcript
+    return transcript.result().text
 
 
-async def get_commands_vector(commands, command, spacy=True) -> list[str]:
-    commands_vector = []
-    if not spacy:
+from config import commands
+
+
+def send_commands_vector_sync(bot, message, file):
+    def get_text_from_user_voice_sync(file):
+        global transcriber
+        transcript = transcriber.transcribe(file)
+        return transcript.text
+
+    def get_commands():
+        voice_command = get_text_from_user_voice_sync(file)
+        commands_vector = []
         for default_command in commands:
-            for token in command.split():
-                if token in default_command.description.split() or token == default_command.command.replace("/", ""):
-                    commands_vector.append(default_command.command)
-        return commands_vector
-    else:
-        for default_command in commands:
-            for token in command.split():
+            for token in voice_command.split():
                 in_lemmas = nlp(token)
                 this_lemmas_description = nlp(default_command.description)
                 this_lemmas_command = nlp(default_command.command)
@@ -99,4 +108,15 @@ async def get_commands_vector(commands, command, spacy=True) -> list[str]:
                 if len(in_lemmas[0].lower()) > 1:
                     if in_lemmas[0] in this_lemmas_description or in_lemmas in this_lemmas_command:
                         commands_vector.append(f'{default_command.command} - {default_command.description}')
-    return list(set(commands_vector))
+        if len(commands_vector) == 0:
+            command = CommandNotRecognized + "\r\n" + voice_command
+        else:
+            try:
+                recognized_commands = list(set(commands_vector))
+                command = voice_command + '\r\n'
+                command += "\r\n".join(recognized_commands)
+            except Exception as E:
+                command = CommandNotRecognized
+        return command
+    command = get_commands()
+    return message, command, file

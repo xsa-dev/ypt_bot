@@ -16,3 +16,4 @@ yarl==1.9.2
 assemblyai
 langchain
 spacy
+apscheduler

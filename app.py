@@ -1,14 +1,19 @@
-import os
 import asyncio
+import os
+import queue
+import threading
+
 from aiogram import Bot, Dispatcher, types
+from aiogram import executor
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Command
-from aiogram import executor
 from dotenv import load_dotenv
+import asyncio
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from config import commands, MY_PHOTOS_1, MY_PHOTOS_2, CommandNotRecognized, MY_VOICE_1, MY_VOICE_2
-from feature_x import return_one_gif, get_answer_from_gpt_model, get_text_from_user_voice, get_commands_vector
+from config import commands, MY_PHOTOS_1, MY_PHOTOS_2, CommandNotRecognized, MY_VOICE_1, MY_VOICE_2, AboutMe
+from feature_x import return_one_gif, get_answer_from_gpt_model, send_commands_vector_sync
 
 load_dotenv('.env')
 TG_TOKEN = os.getenv("TG_TOKEN")
@@ -18,6 +23,20 @@ bot = Bot(token=TG_TOKEN, parse_mode=types.ParseMode.HTML)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 commands_vector = []
+result_queue = queue.Queue()
+
+
+async def send_message_async(chat_id, text):
+    await bot.send_message(chat_id, text)
+
+
+async def check_queue_and_send_messages():
+    global result_queue
+    if not result_queue.empty():
+        message, message_text, file = result_queue.get()
+        await send_message_async(message.from_user.id, message_text)
+        os.remove(file)
+
 
 
 async def set_commands():
@@ -26,37 +45,19 @@ async def set_commands():
 
 @dp.message_handler(content_types='voice')
 async def recognize_command(message: types.Message):
+    global dp
+    global result_queue
     await bot.send_chat_action(message.from_user.id, "typing")
-    directory = './voice'
-    for filename in os.listdir(directory):
-        file_path = os.path.join(directory, filename)
-        if os.path.isfile(file_path):
-            os.remove(file_path)
     try:
-        file_id = message.voice.file_id
-        tg_file = await bot.get_file(file_id)
+        tg_file = await bot.get_file(message.voice.file_id)
         await bot.download_file(tg_file.file_path, destination=tg_file.file_path)
-        command = get_text_from_user_voice(tg_file.file_path)
-        request = command.result()
-        command = request.text
-        os.remove(tg_file.file_path)
-
-        commands_vector = await get_commands_vector(commands=commands, command=command)
-
-        if len(commands_vector) == 0:
-            command = CommandNotRecognized + "\r\n" + request.text
-        else:
-            try:
-                recognized_commands = list(set(commands_vector))
-                command = request.text + '\r\n'
-                command += "\r\n".join(recognized_commands)
-            except Exception as E:
-                command = CommandNotRecognized
+        my_thread = threading.Thread(
+            target=lambda: result_queue.put(send_commands_vector_sync(bot, message, tg_file.file_path)))
+        my_thread.start()
 
     except Exception as E:
         command = CommandNotRecognized
-
-    await message.reply(command)
+        await message.reply(command)
 
 
 @dp.message_handler(Command("start"))
@@ -119,12 +120,8 @@ async def about_me(message: types.Message, state: FSMContext):
     button4 = types.KeyboardButton("/feature")
     keyboard.add(button1, button2)
     keyboard.add(button3, button4)
-    answer_text = ('<b>about_me</b>\r\n' + """
-Мое имя Алексей Савин. Мне 35 лет. Я из Москвы и живу в Москве всю свою жизнь. Мой сайт: https://alekseysavin.com
-А еще у меня есть микроблог: https://t.me/xsa_logs
-Очень интересно сделать свой курс на тему больших языковых моделей.\r\n
-Тут короткая <a href="https://telegra.ph/Istoriya-lyubvi-08-31">история о любви</a>\r\n
-                """.strip() + "\r\n<i>чтобы посмотреть больше обо мне, выбери на клавиатуре что именно хотел бы увидеть.</i>")
+    answer_text = ('<b>about_me</b>\r\n' + f"{AboutMe}"
+                   + "\r\n<i>чтобы посмотреть больше обо мне, выбери на клавиатуре что именно хотел бы увидеть.</i>")
     await bot.send_message(chat_id=message.from_user.id,
                            text=answer_text,
                            reply_markup=keyboard,
@@ -169,6 +166,14 @@ async def feature(message: types.Message, state: FSMContext):
 
 
 if __name__ == "__main__":
+    # queue processing
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(check_queue_and_send_messages, 'interval', seconds=10)
+    scheduler.start()
+
+    # set commands
     loop = asyncio.get_event_loop()
     asyncio.run_coroutine_threadsafe(set_commands(), loop=loop)
+
+    # bot polling
     executor.start_polling(dp, skip_updates=False)
