@@ -6,8 +6,8 @@ load_dotenv('.env')
 
 commands = [
     BotCommand("/about_me", "обо мне (селфи, увлечение, история любви и тд)"),
-    BotCommand("/granny_faq", "вопросы и ответы бабушке гика"),
-    BotCommand("/code", "ссылка на публичный репозиторий"),
+    BotCommand("/granny_faq", "вопросы и ответы бабушке"),
+    BotCommand("/code", "ссылка на публичный репозиторий (код)"),
     BotCommand("/feature", "дополнительная фича как задание со звездочкой"),
     BotCommand("/start", "начать общение заново")
 ]
